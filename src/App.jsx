@@ -1,0 +1,170 @@
+import { useEffect } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
+import { AppProvider, useApp } from "./context/AppContext";
+import { isSupabaseConfigured, useMockData } from "./lib/supabaseClient";
+import AppHeader from "./components/AppHeader";
+import BottomNav from "./components/BottomNav";
+import PageTransition from "./components/PageTransition";
+import ToastStack from "./components/ToastStack";
+import BackToTop from "./components/BackToTop";
+import { LoadingScreen, ErrorScreen } from "./components/StatusScreen";
+import LoginPage from "./pages/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ObrasPage from "./pages/ObrasPage";
+import ChamadaPage from "./pages/ChamadaPage";
+import EquipePage from "./pages/EquipePage";
+import GastosPage from "./pages/GastosPage";
+import RelatoriosPage from "./pages/RelatoriosPage";
+import TemaPage from "./pages/TemaPage";
+
+export default function App() {
+  const { session, authLoading, isPasswordRecovery } = useAuth();
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+
+    let isReloading = false;
+    const reloadWithNewVersion = () => {
+      if (isReloading) return;
+      isReloading = true;
+      window.location.reload();
+    };
+
+    const handleControllerChange = () => {
+      if (navigator.serviceWorker.controller) reloadWithNewVersion();
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+
+    let cancelled = false;
+    let activeRegistration;
+    const handleUpdateFound = () => {
+      const installingWorker = activeRegistration?.installing;
+      if (!installingWorker) return;
+
+      installingWorker.addEventListener("statechange", () => {
+        if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+          reloadWithNewVersion();
+        }
+      });
+    };
+
+    navigator.serviceWorker.ready.then((registration) => {
+      if (cancelled) return;
+
+      activeRegistration = registration;
+      registration.addEventListener("updatefound", handleUpdateFound);
+      registration.update().catch((error) => {
+        // eslint-disable-next-line no-console
+        console.warn("Não foi possível verificar atualizações do app.", error);
+      });
+    }).catch((error) => {
+      // eslint-disable-next-line no-console
+      console.warn("Não foi possível acessar o service worker.", error);
+    });
+
+    return () => {
+      cancelled = true;
+      activeRegistration?.removeEventListener("updatefound", handleUpdateFound);
+      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+    };
+  }, []);
+
+  // Primeiro resolvemos a sessão; só depois o restante do app é montado.
+  if (!isSupabaseConfigured && !useMockData) {
+    return (
+      <div className="app-shell">
+        <ErrorScreen message="Supabase não configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no arquivo .env e reinicie o app." />
+      </div>
+    );
+  }
+
+  if (authLoading) {
+    return (
+      <div className="app-shell">
+        <LoadingScreen />
+      </div>
+    );
+  }
+
+  if (isPasswordRecovery) {
+    return (
+      <div className="app-shell auth-shell-wrapper">
+        <Routes>
+          <Route path="*" element={<ResetPasswordPage />} />
+        </Routes>
+        <ToastStack />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="app-shell auth-shell-wrapper">
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+        <ToastStack />
+      </div>
+    );
+  }
+
+  return (
+    <AppProvider>
+      <AuthenticatedApp />
+    </AppProvider>
+  );
+}
+
+function AuthenticatedApp() {
+  const { initialLoading, loadError } = useApp();
+
+  if (initialLoading) {
+    return (
+      <div className="app-shell">
+        <AppHeader />
+        <LoadingScreen />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="app-shell">
+        <AppHeader />
+        <ErrorScreen message={loadError} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-shell">
+      <AppHeader />
+      <main className="app-main">
+        <div className="scroll-top-sentinel" aria-hidden="true" />
+        <Routes>
+          <Route element={<PageTransition />}>
+            {/* Obras é a porta de entrada do sistema. */}
+            <Route path="/" element={<Navigate to="/obras" replace />} />
+            <Route path="/obras" element={<ObrasPage />} />
+            <Route path="/chamada" element={<ChamadaPage />} />
+            <Route path="/equipe" element={<EquipePage />} />
+            <Route path="/gastos" element={<GastosPage />} />
+            <Route path="/relatorios" element={<RelatoriosPage />} />
+            <Route path="/tema" element={<TemaPage />} />
+            <Route path="/login" element={<Navigate to="/obras" replace />} />
+            <Route path="*" element={<Navigate to="/obras" replace />} />
+          </Route>
+        </Routes>
+      </main>
+
+      <BottomNav />
+      <BackToTop />
+      <ToastStack />
+    </div>
+  );
+}
