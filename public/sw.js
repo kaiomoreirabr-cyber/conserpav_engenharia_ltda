@@ -2,7 +2,7 @@
 // (HTML, JS, CSS, ícones) para abrir mais rápido quando instalado na tela
 // inicial. NUNCA cacheia chamadas ao Supabase (dados sempre vêm da rede,
 // para não mostrar frequência desatualizada).
-const CACHE_NAME = "obra-frequencia-shell-v1";
+const CACHE_NAME = "obra-frequencia-shell-v2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
